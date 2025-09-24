@@ -1,102 +1,286 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [pieces, setPieces] = useState<string[]>([]);
+  const [board, setBoard] = useState<number[]>([]);
+  const [win, setWin] = useState(false);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+  // Slice uploaded image into 9 tiles
+  function sliceImage(image: HTMLImageElement): string[] {
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d")!;
+    const pieces: string[] = [];
+
+    const size = Math.min(image.width, image.height);
+    const pieceSize = size / 3;
+
+    canvas.width = pieceSize;
+    canvas.height = pieceSize;
+
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) {
+        ctx.clearRect(0, 0, pieceSize, pieceSize);
+        ctx.drawImage(
+          image,
+          col * pieceSize,
+          row * pieceSize,
+          pieceSize,
+          pieceSize,
+          0,
+          0,
+          pieceSize,
+          pieceSize
+        );
+        pieces.push(canvas.toDataURL());
+      }
+    }
+
+    return pieces;
+  }
+
+  interface Node {
+    board: number[];
+    blankIndex: number;
+    path: number[][];
+    cost: number;
+  }
+
+  function manhattan(board: number[]) {
+    let dist = 0;
+    for (let i = 0; i < 9; i++) {
+      if (board[i] === 8) continue;
+      const x1 = Math.floor(i / 3),
+        y1 = i % 3;
+      const x2 = Math.floor(board[i] / 3),
+        y2 = board[i] % 3;
+      dist += Math.abs(x1 - x2) + Math.abs(y1 - y2);
+    }
+    return dist;
+  }
+
+  function aStarSolve(startBoard: number[]): number[][] {
+    const visited = new Set<string>();
+    const queue: Node[] = [
+      {
+        board: startBoard,
+        blankIndex: startBoard.indexOf(8),
+        path: [startBoard],
+        cost: manhattan(startBoard),
+      },
+    ];
+
+    while (queue.length) {
+      queue.sort((a, b) => a.cost - b.cost);
+      const node = queue.shift()!;
+      const key = node.board.join(",");
+      if (visited.has(key)) continue;
+      visited.add(key);
+
+      if (arraysEqual(node.board, [...Array(9).keys()])) {
+        return node.path;
+      }
+
+      const { blankIndex, board: b } = node;
+      const moves = [-1, 1, -3, 3];
+      for (let move of moves) {
+        const newIndex = blankIndex + move;
+        const row = Math.floor(blankIndex / 3),
+          col = blankIndex % 3;
+        const newRow = Math.floor(newIndex / 3),
+          newCol = newIndex % 3;
+
+        if (newIndex < 0 || newIndex > 8) continue;
+        if (Math.abs(newRow - row) + Math.abs(newCol - col) !== 1) continue;
+
+        const newBoard = [...b];
+        [newBoard[blankIndex], newBoard[newIndex]] = [
+          newBoard[newIndex],
+          newBoard[blankIndex],
+        ];
+
+        queue.push({
+          board: newBoard,
+          blankIndex: newIndex,
+          path: [...node.path, newBoard],
+          cost: manhattan(newBoard) + node.path.length,
+        });
+      }
+    }
+
+    return [];
+  }
+
+  // Check if a board is solvable
+  function isSolvable(arr: number[]) {
+    let inv = 0;
+    for (let i = 0; i < arr.length; i++) {
+      for (let j = i + 1; j < arr.length; j++) {
+        if (arr[i] !== 8 && arr[j] !== 8 && arr[i] > arr[j]) inv++;
+      }
+    }
+    return inv % 2 === 0;
+  }
+
+  function shuffleBoard(): number[] {
+    let arr = [...Array(9).keys()]; // 0-8
+    do {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    } while (!isSolvable(arr) || arraysEqual(arr, [...Array(9).keys()]));
+    return arr;
+  }
+
+  const handleShuffle = () => {
+    if (pieces.length === 0) return;
+    const shuffled = shuffleBoard();
+    setBoard(shuffled);
+    setWin(false);
+  };
+
+  function arraysEqual(a: number[], b: number[]) {
+    return a.every((val, i) => val === b[i]);
+  }
+
+  const handleSolve = () => {
+    if (pieces.length === 0) return;
+    const path = aStarSolve(board);
+    if (path.length === 0) return;
+
+    path.forEach((state, idx) => {
+      setTimeout(() => {
+        setBoard(state);
+        if (idx === path.length - 1) setWin(true);
+      }, idx * 500);
+    });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const imageUrl = URL.createObjectURL(file);
+      const img = new Image();
+      img.src = imageUrl;
+      img.onload = () => {
+        const slices = sliceImage(img);
+        setPieces(slices);
+
+        const shuffled = shuffleBoard();
+        setBoard(shuffled);
+        setWin(false);
+      };
+    }
+  };
+
+  const handleMove = (index: number) => {
+    const blankIndex = board.indexOf(8);
+    const row = Math.floor(index / 3);
+    const col = index % 3;
+    const blankRow = Math.floor(blankIndex / 3);
+    const blankCol = blankIndex % 3;
+
+    if (Math.abs(row - blankRow) + Math.abs(col - blankCol) === 1) {
+      const newBoard = [...board];
+      [newBoard[index], newBoard[blankIndex]] = [
+        newBoard[blankIndex],
+        newBoard[index],
+      ];
+      setBoard(newBoard);
+      if (arraysEqual(newBoard, [...Array(9).keys()])) setWin(true);
+    }
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <header className="bg-gray-900 text-white py-4 px-8">
+        <h1 className="text-2xl font-bold">AI Homework 1</h1>
+      </header>
+
+      <main className="flex flex-1 items-center justify-center bg-gray-100">
+        <div className="max-w-2xl bg-white rounded-2xl shadow-lg p-8">
+          <h2 className="text-3xl font-semibold mb-4 text-center text-black">
+            Welcome to the 8-Puzzle Solver
+          </h2>
+          <p className="text-gray-600 text-justify">
+            Upload an image to generate an interactive 8-puzzle game. Shuffle it
+            and try solving manually, or watch the optimal A* solution step by
+            step.
+          </p>
+
+          <div className="flex justify-center mt-6 space-x-4">
+            <input
+              id="fileInput"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <label
+              htmlFor="fileInput"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer"
+            >
+              Upload Image
+            </label>
+          </div>
+
+          {pieces.length > 0 && (
+            <div className="flex flex-col items-center mt-6">
+              <p className="text-gray-700 font-medium mb-2 text-center">
+                Puzzle:
+              </p>
+
+              {/* Puzzle grid */}
+              <div className="grid grid-cols-3 grid-rows-3 gap-1 w-72 h-72">
+                {board.map((tileIndex, i) => (
+                  <div
+                    key={i}
+                    onClick={() => handleMove(i)}
+                    className="flex items-center justify-center bg-gray-200 overflow-hidden cursor-pointer"
+                  >
+                    {tileIndex !== 8 && (
+                      <img
+                        src={pieces[tileIndex]}
+                        alt={`Tile ${tileIndex}`}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Shuffle & Solve buttons */}
+              <div className="flex space-x-4 mt-4">
+                <button
+                  onClick={handleShuffle}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                >
+                  Shuffle
+                </button>
+                <button
+                  onClick={handleSolve}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Solve
+                </button>
+              </div>
+
+              {win && (
+                <p className="text-green-600 font-bold mt-4">
+                  You solved the puzzle! 🎉
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
+
+      <footer className="bg-gray-900 text-white py-4 text-center">
+        <p className="text-sm">
+          &copy; {new Date().getFullYear()} Richard Brito
+        </p>
       </footer>
     </div>
   );
