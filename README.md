@@ -1,3 +1,10 @@
+Hello! This is AI Homework 1. The purpose of this app is a puzzle game that utilizes the AStar algorithm to find the most optimal outcome. In this app, users are able to upload an image, and it will automatically be made into a puzzle. After the puzzle is created, the user is given the option to shuffle the image again, or for it to be automatically solved using the AStar algorithm.
+
+This project uses NextJS, Typescript + Tailwind.
+
+Instructions for running are below.
+
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
